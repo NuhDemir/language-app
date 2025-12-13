@@ -1,0 +1,423 @@
+// --------------------------------------------------------
+// NAMING CONVENTION CHECKLIST
+// 1. Language: English only.
+// 2. Case: snake_case for DB columns/tables (map in Prisma).
+// 3. Tables: Plural (e.g., 'users').
+// 4. PK: Always 'id'.
+// 5. FK: 'target_singular_name' + '_id'.
+// --------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// CLUSTER A: Content Management (Phase 3+)
+// ============================================================
+
+/// Language model for ISO 639-1 compliant language definitions.
+/// Natural Key: `code` (e.g., 'en', 'tr').
+model Language {
+  /// ISO 639-1 Code (PK). Fixed 2-char for index optimization.
+  code String @id @db.Char(2)
+
+  /// Display name in English. e.g., 'Turkish'
+  name String @db.VarChar(50)
+
+  /// Name in native language. e.g., 'Türkçe'
+  nativeName String @map("native_name") @db.VarChar(50)
+
+  /// Flag emoji for UI. e.g., '🇹🇷'
+  flagEmoji String @map("flag_emoji") @db.VarChar(10)
+
+  /// Writing direction: 'LTR' or 'RTL'
+  direction String @default("LTR") @db.VarChar(3)
+
+  /// Soft delete / feature flag
+  isActive Boolean @default(true) @map("is_active")
+
+  // --------------------------------------------------------
+  // RELATIONS (Phase 6+)
+  // --------------------------------------------------------
+
+  /// Courses where this language is being learned
+  coursesLearning Course[] @relation("LearningLang")
+
+  /// Courses where this language is the source (from)
+  coursesTeaching Course[] @relation("FromLang")
+
+  @@map("languages")
+}
+
+// ============================================================
+// CLUSTER B: User Progress (Phase 4+)
+// ============================================================
+
+/// User model with UUID, denormalization fields, and JSONB settings.
+/// Primary Key: UUID v4 (database-generated).
+model User {
+  /// UUID v4 Primary Key (PostgreSQL gen_random_uuid())
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Username - unique, max 30 chars
+  username String @unique @db.VarChar(30)
+
+  /// Email - unique, max 255 chars
+  email String @unique @db.VarChar(255)
+
+  /// Hashed password (bcrypt/argon2)
+  passwordHash String @map("password_hash") @db.VarChar(255)
+
+  // --------------------------------------------------------
+  // DENORMALIZATION FIELDS (Performance)
+  // --------------------------------------------------------
+
+  /// Cached total XP for leaderboard (avoid SUM aggregations)
+  totalXp BigInt @default(0) @map("total_xp")
+
+  /// Current streak count
+  streakDays Int @default(0) @map("streak_days")
+
+  /// Last activity date (for streak calculation)
+  lastActivity DateTime? @map("last_activity_date") @db.Date
+
+  // --------------------------------------------------------
+  // JSONB SETTINGS (Flexibility)
+  // --------------------------------------------------------
+
+  /// User preferences (daily_goal, sound_effects, notifications, etc.)
+  settings Json @default("{\"daily_goal\": 50, \"sound_effects\": true, \"notifications\": true}")
+
+  // --------------------------------------------------------
+  // METADATA
+  // --------------------------------------------------------
+
+  /// Account creation timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  /// Last update timestamp (auto-updated)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // --------------------------------------------------------
+  // RELATIONS (Phase 13)
+  // --------------------------------------------------------
+
+  /// User's course enrollments
+  enrollments Enrollment[]
+
+  /// User's vocabulary progress (SRS - Phase 16)
+  vocabularyProgress UserVocabularyProgress[]
+
+  @@map("users")
+}
+
+// ============================================================
+// CLUSTER A: Content Management - Course (Phase 6)
+// ============================================================
+
+/// Course model representing a language learning path.
+/// Example: "English for Turkish Speakers" (EN from TR)
+model Course {
+  /// BIGSERIAL Primary Key (content tables use sequential IDs)
+  id BigInt @id @default(autoincrement())
+
+  /// Target language being learned (FK to languages)
+  learningLangCode String   @map("learning_lang_code") @db.Char(2)
+  learningLang     Language @relation("LearningLang", fields: [learningLangCode], references: [code])
+
+  /// Source language (user's native language)
+  fromLangCode String   @map("from_lang_code") @db.Char(2)
+  fromLang     Language @relation("FromLang", fields: [fromLangCode], references: [code])
+
+  /// Course title (e.g., "Türkçe Konuşanlar İçin İngilizce")
+  title String @db.VarChar(100)
+
+  /// Optional description
+  description String? @db.Text
+
+  /// Course phase: 'incubator', 'beta', 'live'
+  phase String @default("live") @db.VarChar(20)
+
+  /// Creation timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  /// Last update timestamp
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  // --------------------------------------------------------
+  // RELATIONS (Phase 7+)
+  // --------------------------------------------------------
+
+  /// Units belonging to this course
+  units Unit[]
+
+  /// Course enrollments (Phase 13)
+  enrollments Enrollment[]
+
+  /// Course vocabulary progress (SRS - Phase 16)
+  vocabularyProgress UserVocabularyProgress[]
+
+  /// Unique constraint: Only one course per language pair
+  @@unique([learningLangCode, fromLangCode], name: "uq_course_path")
+  @@map("courses")
+}
+
+// ============================================================
+// CLUSTER A: Content Hierarchy (Phase 7)
+// ============================================================
+
+/// Unit model - main sections within a course.
+/// Has ordered levels as children.
+model Unit {
+  /// BIGSERIAL Primary Key
+  id BigInt @id @default(autoincrement())
+
+  /// Parent course (FK with cascade delete)
+  courseId BigInt @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  /// Order within the course (1, 2, 3...)
+  orderIndex Int @map("order_index")
+
+  /// Unit title
+  title String @db.VarChar(100)
+
+  /// Optional description
+  description String? @db.Text
+
+  /// Rich guidebook content (structured JSON)
+  guidebookContent Json? @map("guidebook_content")
+
+  /// UI color theme (hex code)
+  colorTheme String? @map("color_theme") @db.VarChar(7)
+
+  /// Icon URL for UI
+  iconUrl String? @map("icon_url") @db.VarChar(255)
+
+  // --------------------------------------------------------
+  // RELATIONS
+  // --------------------------------------------------------
+
+  /// Levels belonging to this unit
+  levels Level[]
+
+  /// Unique constraint: No duplicate order in same course
+  @@unique([courseId, orderIndex], name: "uq_unit_order")
+  @@map("units")
+}
+
+/// Level model - difficulty stages within a unit.
+/// Contains exercises (to be added in Phase 8).
+model Level {
+  /// BIGSERIAL Primary Key
+  id BigInt @id @default(autoincrement())
+
+  /// Parent unit (FK with cascade delete)
+  unitId BigInt @map("unit_id")
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  /// Order within the unit (1, 2, 3...)
+  orderIndex Int @map("order_index")
+
+  /// Number of lessons required to complete this level
+  totalLessons Int @default(5) @map("total_lessons")
+
+  /// Chest reward reference (placeholder for future phase)
+  chestRewardId Int? @map("chest_reward_id")
+
+  // --------------------------------------------------------
+  // RELATIONS (Phase 8)
+  // --------------------------------------------------------
+
+  /// Exercises belonging to this level
+  exercises Exercise[]
+
+  /// Unique constraint: No duplicate order in same unit
+  @@unique([unitId, orderIndex], name: "uq_level_order")
+  @@map("levels")
+}
+
+// ============================================================
+// CLUSTER A: Content - Exercise (Phase 8)
+// ============================================================
+
+/// Exercise model - the smallest learning unit.
+/// Uses hybrid structure: relational fields for querying, JSONB for polymorphic content.
+model Exercise {
+  /// BIGSERIAL Primary Key (high volume expected)
+  id BigInt @id @default(autoincrement())
+
+  /// Parent level (FK with cascade delete)
+  levelId BigInt @map("level_id")
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Cascade)
+
+  /// Exercise type: 'translate', 'match_pairs', 'listen_tap', 'speak', etc.
+  /// Using String instead of enum for flexibility (new types via code, not migration)
+  type String @db.VarChar(50)
+
+  /// Difficulty score for adaptive learning (1-10)
+  difficultyScore Int @default(1) @map("difficulty_score") @db.SmallInt
+
+  // --------------------------------------------------------
+  // CONTENT PAYLOAD (Polymorphic Structure)
+  // --------------------------------------------------------
+
+  /// Main content - structure depends on `type`
+  /// Example (translate): { "prompt": "Kedi", "correct_answers": ["Cat"] }
+  /// Example (match): { "pairs": [{"en": "cat", "tr": "kedi"}, ...] }
+  content Json
+
+  /// Media assets (audio URLs, image URLs, etc.)
+  mediaMetadata Json @default("{}") @map("media_metadata")
+
+  /// Creation timestamp
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // --------------------------------------------------------
+  // INDEXES
+  // --------------------------------------------------------
+
+  /// FK performance: "Get exercises for this level"
+  @@index([levelId])
+  /// Type filter: "Get all speaking exercises"
+  @@index([type])
+  /// GIN index for JSONB containment queries (Phase 10)
+  /// Note: Will be manually optimized with jsonb_path_ops in migration
+  @@index([content], type: Gin)
+  @@map("exercises")
+}
+
+// ============================================================
+// CLUSTER B: User Progress - Enrollment (Phase 13)
+// ============================================================
+
+/// Enrollment model - N:N bridge between User and Course.
+/// Uses composite primary key (user_id, course_id).
+model Enrollment {
+  /// User reference (FK with cascade delete)
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Course reference (FK with cascade delete)
+  courseId BigInt @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  /// Enrollment active status (user may pause or drop course)
+  isActive Boolean @default(true) @map("is_active")
+
+  /// Course-specific progress metadata (JSONB for flexibility)
+  /// Example: { "last_unit_id": 5, "checkpoint_rewards": [1, 2] }
+  progressData Json @default("{}") @map("progress_data")
+
+  /// Enrollment timestamp
+  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz
+
+  /// Composite Primary Key: (user_id, course_id)
+  /// Prevents duplicate enrollments at database level
+  @@id([userId, courseId])
+  @@map("enrollments")
+}
+
+// ============================================================
+// CLUSTER B: User Progress - LessonCompletion (Phase 14)
+// Partitioned Table: PARTITION BY RANGE (completed_at)
+// ============================================================
+
+/// LessonCompletion model - high-volume progress tracking.
+/// Uses Range Partitioning by completed_at for scalability.
+/// Note: FK relations intentionally omitted for partition compatibility.
+model LessonCompletion {
+  /// Global ID (part of composite PK)
+  id BigInt @default(autoincrement())
+
+  /// User reference (no FK - partitioned table compatibility)
+  userId String @map("user_id") @db.Uuid
+
+  /// Course reference
+  courseId BigInt @map("course_id")
+
+  /// Unit reference
+  unitId BigInt @map("unit_id")
+
+  /// Level reference
+  levelId BigInt @map("level_id")
+
+  // --------------------------------------------------------
+  // ANALYTICS DATA
+  // --------------------------------------------------------
+
+  /// XP earned in this lesson
+  xpEarned Int @map("xp_earned")
+
+  /// Duration in seconds
+  durationSeconds Int @map("duration_seconds")
+
+  /// Accuracy percentage (0.00 - 100.00)
+  accuracyPercentage Decimal @map("accuracy_percentage") @db.Decimal(5, 2)
+
+  // --------------------------------------------------------
+  // PARTITION KEY (Critical)
+  // --------------------------------------------------------
+
+  /// Completion timestamp - PARTITION KEY
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz
+
+  /// Composite PK: (user_id, completed_at, id)
+  /// Partition key MUST be part of PK in PostgreSQL
+  @@id([userId, completedAt, id])
+  /// Index for user-course progress queries
+  @@index([userId, courseId])
+  @@map("lesson_completions")
+}
+
+// ============================================================
+// CLUSTER B: User Progress - UserVocabularyProgress (Phase 16)
+// SRS Algorithm Storage (FSRS / SM-2)
+// ============================================================
+
+/// UserVocabularyProgress model - tracks per-word memory state.
+/// Supports FSRS and SM-2 spaced repetition algorithms.
+model UserVocabularyProgress {
+  /// User reference (FK with cascade delete)
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Course reference (FK with cascade delete)
+  courseId BigInt @map("course_id")
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  /// Word token (root form, e.g., "run" not "running")
+  wordToken String @map("word_token") @db.VarChar(100)
+
+  // --------------------------------------------------------
+  // ALGORITHM PARAMETERS (FSRS / SM-2)
+  // --------------------------------------------------------
+
+  /// Memory Stability (days): How long until forgetting
+  stability Float @default(0) @map("stability")
+
+  /// Difficulty Level (0-10): How hard is this word
+  difficulty Float @default(0) @map("difficulty")
+
+  /// Number of reviews completed
+  repetitionCount Int @default(0) @map("repetition_count")
+
+  /// Last review timestamp
+  lastReviewedAt DateTime? @default(now()) @map("last_reviewed_at") @db.Timestamptz
+
+  /// CRITICAL: Next scheduled review time
+  /// This is the most queried field
+  nextReviewAt DateTime @map("next_review_at") @db.Timestamptz
+
+  /// Composite Primary Key: (user_id, course_id, word_token)
+  /// One user can have one record per word per course
+  @@id([userId, courseId, wordToken])
+  /// Strategic Index for SRS fetch queue (Phase 17)
+  /// Will be manually optimized with INCLUDE in migration
+  @@index([userId, courseId, nextReviewAt], name: "idx_srs_fetch_queue")
+  @@map("user_vocabulary_progress")
+}

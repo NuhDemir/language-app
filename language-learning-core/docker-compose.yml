@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: language_learning_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepassword}
+      POSTGRES_DB: ${POSTGRES_DB:-language_app}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-language_app}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer
+    container_name: language_learning_pgbouncer
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-admin}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-securepassword}
+      DB_NAME: ${POSTGRES_DB:-language_app}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 20
+      ADMIN_USERS: ${POSTGRES_USER:-admin}
+      AUTH_TYPE: plain 
+      # Note: For production, use 'md5' or 'scram-sha-256' with a proper user list file.
+      # 'plain' is used here for simplicity in development setup with env vars injection support in edoburu image if configured, 
+      # but commonly edoburu image needs specific config. 
+      # Let's switch to bitnami for easier env var config if edoburu is tricky, OR configure edoburu correctly.
+      # The user doc suggested bitnami/pgbouncer or edoburu. Bitnami is often easier for env vars.
+      # Let's use bitnami for easier setup via env vars.
+    ports:
+      - "6432:6432"
+
+volumes:
+  pgdata:
