@@ -15,12 +15,6 @@ datasource db {
   provider = "postgresql"
 }
 
-// ============================================================
-// CLUSTER A: Content Management (Phase 3+)
-// ============================================================
-
-/// Language model for ISO 639-1 compliant language definitions.
-/// Natural Key: `code` (e.g., 'en', 'tr').
 model Language {
   /// ISO 639-1 Code (PK). Fixed 2-char for index optimization.
   code String @id @db.Char(2)
@@ -40,10 +34,6 @@ model Language {
   /// Soft delete / feature flag
   isActive Boolean @default(true) @map("is_active")
 
-  // --------------------------------------------------------
-  // RELATIONS (Phase 6+)
-  // --------------------------------------------------------
-
   /// Courses where this language is being learned
   coursesLearning Course[] @relation("LearningLang")
 
@@ -53,20 +43,11 @@ model Language {
   @@map("languages")
 }
 
-// ============================================================
-// CLUSTER B: User Progress (Phase 4+)
-// ============================================================
-
-/// User model with UUID, denormalization fields, and JSONB settings.
-/// Primary Key: UUID v4 (database-generated).
 model User {
-  /// UUID v4 Primary Key (PostgreSQL gen_random_uuid())
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
-  /// Username - unique, max 30 chars
   username String @unique @db.VarChar(30)
 
-  /// Email - unique, max 255 chars
   email String @unique @db.VarChar(255)
 
   /// Hashed password (bcrypt/argon2)
