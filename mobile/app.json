@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "bidakika",
+    "slug": "bidakika",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "bidakika",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "icon": "./assets/logo/logo.png",
+    "splash": {
+      "image": "./assets/logo/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bidakika.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo/logo.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.bidakika.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

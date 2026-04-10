@@ -1,404 +1,305 @@
-// --------------------------------------------------------
-// NAMING CONVENTION CHECKLIST
-// 1. Language: English only.
-// 2. Case: snake_case for DB columns/tables (map in Prisma).
-// 3. Tables: Plural (e.g., 'users').
-// 4. PK: Always 'id'.
-// 5. FK: 'target_singular_name' + '_id'.
-// --------------------------------------------------------
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Language {
-  /// ISO 639-1 Code (PK). Fixed 2-char for index optimization.
-  code String @id @db.Char(2)
+  code       String  @id @db.Char(2)
+  name       String  @db.VarChar(50)
+  nativeName String  @map("native_name") @db.VarChar(50)
+  flagEmoji  String  @map("flag_emoji") @db.VarChar(10)
+  direction  String  @default("LTR") @db.VarChar(3)
+  isActive   Boolean @default(true) @map("is_active")
 
-  /// Display name in English. e.g., 'Turkish'
-  name String @db.VarChar(50)
-
-  /// Name in native language. e.g., 'Türkçe'
-  nativeName String @map("native_name") @db.VarChar(50)
-
-  /// Flag emoji for UI. e.g., '🇹🇷'
-  flagEmoji String @map("flag_emoji") @db.VarChar(10)
-
-  /// Writing direction: 'LTR' or 'RTL'
-  direction String @default("LTR") @db.VarChar(3)
-
-  /// Soft delete / feature flag
-  isActive Boolean @default(true) @map("is_active")
-
-  /// Courses where this language is being learned
   coursesLearning Course[] @relation("LearningLang")
-
-  /// Courses where this language is the source (from)
   coursesTeaching Course[] @relation("FromLang")
 
   @@map("languages")
 }
 
 model User {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-
-  username String @unique @db.VarChar(30)
-
-  email String @unique @db.VarChar(255)
-
-  /// Hashed password (bcrypt/argon2)
-  passwordHash String @map("password_hash") @db.VarChar(255)
-
-  // --------------------------------------------------------
-  // DENORMALIZATION FIELDS (Performance)
-  // --------------------------------------------------------
-
-  /// Cached total XP for leaderboard (avoid SUM aggregations)
-  totalXp BigInt @default(0) @map("total_xp")
-
-  /// Current streak count
-  streakDays Int @default(0) @map("streak_days")
-
-  /// Last activity date (for streak calculation)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  username     String    @unique @db.VarChar(30)
+  email        String    @unique @db.VarChar(255)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  totalXp      BigInt    @default(0) @map("total_xp")
+  streakDays   Int       @default(0) @map("streak_days")
   lastActivity DateTime? @map("last_activity_date") @db.Date
+  settings     Json      @default("{\"daily_goal\": 50, \"sound_effects\": true, \"notifications\": true}")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  // --------------------------------------------------------
-  // JSONB SETTINGS (Flexibility)
-  // --------------------------------------------------------
-
-  /// User preferences (daily_goal, sound_effects, notifications, etc.)
-  settings Json @default("{\"daily_goal\": 50, \"sound_effects\": true, \"notifications\": true}")
-
-  // --------------------------------------------------------
-  // METADATA
-  // --------------------------------------------------------
-
-  /// Account creation timestamp
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  /// Last update timestamp (auto-updated)
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  // --------------------------------------------------------
-  // RELATIONS (Phase 13)
-  // --------------------------------------------------------
-
-  /// User's course enrollments
-  enrollments Enrollment[]
-
-  /// User's vocabulary progress (SRS - Phase 16)
+  enrollments        Enrollment[]
   vocabularyProgress UserVocabularyProgress[]
+  inventory          UserInventory[]
+  wallets            UserWallet[]
+  leagueMemberships  LeagueMembership[]
+  achievements       UserAchievement[]
 
   @@map("users")
 }
 
-// ============================================================
-// CLUSTER A: Content Management - Course (Phase 6)
-// ============================================================
-
-/// Course model representing a language learning path.
-/// Example: "English for Turkish Speakers" (EN from TR)
 model Course {
-  /// BIGSERIAL Primary Key (content tables use sequential IDs)
-  id BigInt @id @default(autoincrement())
-
-  /// Target language being learned (FK to languages)
+  id               BigInt   @id @default(autoincrement())
   learningLangCode String   @map("learning_lang_code") @db.Char(2)
   learningLang     Language @relation("LearningLang", fields: [learningLangCode], references: [code])
+  fromLangCode     String   @map("from_lang_code") @db.Char(2)
+  fromLang         Language @relation("FromLang", fields: [fromLangCode], references: [code])
+  title            String   @db.VarChar(100)
+  description      String?  @db.Text
+  phase            String   @default("live") @db.VarChar(20)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
-  /// Source language (user's native language)
-  fromLangCode String   @map("from_lang_code") @db.Char(2)
-  fromLang     Language @relation("FromLang", fields: [fromLangCode], references: [code])
-
-  /// Course title (e.g., "Türkçe Konuşanlar İçin İngilizce")
-  title String @db.VarChar(100)
-
-  /// Optional description
-  description String? @db.Text
-
-  /// Course phase: 'incubator', 'beta', 'live'
-  phase String @default("live") @db.VarChar(20)
-
-  /// Creation timestamp
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  /// Last update timestamp
-  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
-
-  // --------------------------------------------------------
-  // RELATIONS (Phase 7+)
-  // --------------------------------------------------------
-
-  /// Units belonging to this course
-  units Unit[]
-
-  /// Course enrollments (Phase 13)
-  enrollments Enrollment[]
-
-  /// Course vocabulary progress (SRS - Phase 16)
+  units              Unit[]
+  enrollments        Enrollment[]
   vocabularyProgress UserVocabularyProgress[]
 
-  /// Unique constraint: Only one course per language pair
   @@unique([learningLangCode, fromLangCode], name: "uq_course_path")
   @@map("courses")
 }
 
-// ============================================================
-// CLUSTER A: Content Hierarchy (Phase 7)
-// ============================================================
-
-/// Unit model - main sections within a course.
-/// Has ordered levels as children.
 model Unit {
-  /// BIGSERIAL Primary Key
-  id BigInt @id @default(autoincrement())
+  id               BigInt  @id @default(autoincrement())
+  courseId         BigInt  @map("course_id")
+  course           Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  orderIndex       Int     @map("order_index")
+  title            String  @db.VarChar(100)
+  description      String? @db.Text
+  guidebookContent Json?   @map("guidebook_content")
+  colorTheme       String? @map("color_theme") @db.VarChar(7)
+  iconUrl          String? @map("icon_url") @db.VarChar(255)
 
-  /// Parent course (FK with cascade delete)
-  courseId BigInt @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  /// Order within the course (1, 2, 3...)
-  orderIndex Int @map("order_index")
-
-  /// Unit title
-  title String @db.VarChar(100)
-
-  /// Optional description
-  description String? @db.Text
-
-  /// Rich guidebook content (structured JSON)
-  guidebookContent Json? @map("guidebook_content")
-
-  /// UI color theme (hex code)
-  colorTheme String? @map("color_theme") @db.VarChar(7)
-
-  /// Icon URL for UI
-  iconUrl String? @map("icon_url") @db.VarChar(255)
-
-  // --------------------------------------------------------
-  // RELATIONS
-  // --------------------------------------------------------
-
-  /// Levels belonging to this unit
   levels Level[]
 
-  /// Unique constraint: No duplicate order in same course
   @@unique([courseId, orderIndex], name: "uq_unit_order")
   @@map("units")
 }
 
-/// Level model - difficulty stages within a unit.
-/// Contains exercises (to be added in Phase 8).
 model Level {
-  /// BIGSERIAL Primary Key
-  id BigInt @id @default(autoincrement())
+  id            BigInt @id @default(autoincrement())
+  unitId        BigInt @map("unit_id")
+  unit          Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  orderIndex    Int    @map("order_index")
+  totalLessons  Int    @default(5) @map("total_lessons")
+  chestRewardId Int?   @map("chest_reward_id")
 
-  /// Parent unit (FK with cascade delete)
-  unitId BigInt @map("unit_id")
-  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
-
-  /// Order within the unit (1, 2, 3...)
-  orderIndex Int @map("order_index")
-
-  /// Number of lessons required to complete this level
-  totalLessons Int @default(5) @map("total_lessons")
-
-  /// Chest reward reference (placeholder for future phase)
-  chestRewardId Int? @map("chest_reward_id")
-
-  // --------------------------------------------------------
-  // RELATIONS (Phase 8)
-  // --------------------------------------------------------
-
-  /// Exercises belonging to this level
   exercises Exercise[]
 
-  /// Unique constraint: No duplicate order in same unit
   @@unique([unitId, orderIndex], name: "uq_level_order")
   @@map("levels")
 }
 
-// ============================================================
-// CLUSTER A: Content - Exercise (Phase 8)
-// ============================================================
-
-/// Exercise model - the smallest learning unit.
-/// Uses hybrid structure: relational fields for querying, JSONB for polymorphic content.
 model Exercise {
-  /// BIGSERIAL Primary Key (high volume expected)
-  id BigInt @id @default(autoincrement())
+  id              BigInt   @id @default(autoincrement())
+  levelId         BigInt   @map("level_id")
+  level           Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  type            String   @db.VarChar(50)
+  difficultyScore Int      @default(1) @map("difficulty_score") @db.SmallInt
+  content         Json
+  mediaMetadata   Json     @default("{}") @map("media_metadata")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  /// Parent level (FK with cascade delete)
-  levelId BigInt @map("level_id")
-  level   Level  @relation(fields: [levelId], references: [id], onDelete: Cascade)
-
-  /// Exercise type: 'translate', 'match_pairs', 'listen_tap', 'speak', etc.
-  /// Using String instead of enum for flexibility (new types via code, not migration)
-  type String @db.VarChar(50)
-
-  /// Difficulty score for adaptive learning (1-10)
-  difficultyScore Int @default(1) @map("difficulty_score") @db.SmallInt
-
-  // --------------------------------------------------------
-  // CONTENT PAYLOAD (Polymorphic Structure)
-  // --------------------------------------------------------
-
-  /// Main content - structure depends on `type`
-  /// Example (translate): { "prompt": "Kedi", "correct_answers": ["Cat"] }
-  /// Example (match): { "pairs": [{"en": "cat", "tr": "kedi"}, ...] }
-  content Json
-
-  /// Media assets (audio URLs, image URLs, etc.)
-  mediaMetadata Json @default("{}") @map("media_metadata")
-
-  /// Creation timestamp
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  // --------------------------------------------------------
-  // INDEXES
-  // --------------------------------------------------------
-
-  /// FK performance: "Get exercises for this level"
   @@index([levelId])
-  /// Type filter: "Get all speaking exercises"
   @@index([type])
-  /// GIN index for JSONB containment queries (Phase 10)
-  /// Note: Will be manually optimized with jsonb_path_ops in migration
   @@index([content], type: Gin)
   @@map("exercises")
 }
 
-// ============================================================
-// CLUSTER B: User Progress - Enrollment (Phase 13)
-// ============================================================
-
-/// Enrollment model - N:N bridge between User and Course.
-/// Uses composite primary key (user_id, course_id).
 model Enrollment {
-  /// User reference (FK with cascade delete)
-  userId String @map("user_id") @db.Uuid
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String   @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId     BigInt   @map("course_id")
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isActive     Boolean  @default(true) @map("is_active")
+  progressData Json     @default("{}") @map("progress_data")
+  enrolledAt   DateTime @default(now()) @map("enrolled_at") @db.Timestamptz
 
-  /// Course reference (FK with cascade delete)
-  courseId BigInt @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  /// Enrollment active status (user may pause or drop course)
-  isActive Boolean @default(true) @map("is_active")
-
-  /// Course-specific progress metadata (JSONB for flexibility)
-  /// Example: { "last_unit_id": 5, "checkpoint_rewards": [1, 2] }
-  progressData Json @default("{}") @map("progress_data")
-
-  /// Enrollment timestamp
-  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz
-
-  /// Composite Primary Key: (user_id, course_id)
-  /// Prevents duplicate enrollments at database level
   @@id([userId, courseId])
   @@map("enrollments")
 }
 
-// ============================================================
-// CLUSTER B: User Progress - LessonCompletion (Phase 14)
-// Partitioned Table: PARTITION BY RANGE (completed_at)
-// ============================================================
-
-/// LessonCompletion model - high-volume progress tracking.
-/// Uses Range Partitioning by completed_at for scalability.
-/// Note: FK relations intentionally omitted for partition compatibility.
+/// Partitioned by completed_at (Range Partitioning)
 model LessonCompletion {
-  /// Global ID (part of composite PK)
-  id BigInt @default(autoincrement())
+  id                 BigInt   @default(autoincrement())
+  userId             String   @map("user_id") @db.Uuid
+  courseId           BigInt   @map("course_id")
+  unitId             BigInt   @map("unit_id")
+  levelId            BigInt   @map("level_id")
+  xpEarned           Int      @map("xp_earned")
+  durationSeconds    Int      @map("duration_seconds")
+  accuracyPercentage Decimal  @map("accuracy_percentage") @db.Decimal(5, 2)
+  completedAt        DateTime @default(now()) @map("completed_at") @db.Timestamptz
 
-  /// User reference (no FK - partitioned table compatibility)
-  userId String @map("user_id") @db.Uuid
-
-  /// Course reference
-  courseId BigInt @map("course_id")
-
-  /// Unit reference
-  unitId BigInt @map("unit_id")
-
-  /// Level reference
-  levelId BigInt @map("level_id")
-
-  // --------------------------------------------------------
-  // ANALYTICS DATA
-  // --------------------------------------------------------
-
-  /// XP earned in this lesson
-  xpEarned Int @map("xp_earned")
-
-  /// Duration in seconds
-  durationSeconds Int @map("duration_seconds")
-
-  /// Accuracy percentage (0.00 - 100.00)
-  accuracyPercentage Decimal @map("accuracy_percentage") @db.Decimal(5, 2)
-
-  // --------------------------------------------------------
-  // PARTITION KEY (Critical)
-  // --------------------------------------------------------
-
-  /// Completion timestamp - PARTITION KEY
-  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz
-
-  /// Composite PK: (user_id, completed_at, id)
-  /// Partition key MUST be part of PK in PostgreSQL
   @@id([userId, completedAt, id])
-  /// Index for user-course progress queries
   @@index([userId, courseId])
   @@map("lesson_completions")
 }
 
-// ============================================================
-// CLUSTER B: User Progress - UserVocabularyProgress (Phase 16)
-// SRS Algorithm Storage (FSRS / SM-2)
-// ============================================================
-
-/// UserVocabularyProgress model - tracks per-word memory state.
-/// Supports FSRS and SM-2 spaced repetition algorithms.
+/// SRS Algorithm Storage (FSRS / SM-2)
 model UserVocabularyProgress {
-  /// User reference (FK with cascade delete)
-  userId String @map("user_id") @db.Uuid
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String    @map("user_id") @db.Uuid
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        BigInt    @map("course_id")
+  course          Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  wordToken       String    @map("word_token") @db.VarChar(100)
+  stability       Float     @default(0) @map("stability")
+  difficulty      Float     @default(0) @map("difficulty")
+  repetitionCount Int       @default(0) @map("repetition_count")
+  lastReviewedAt  DateTime? @default(now()) @map("last_reviewed_at") @db.Timestamptz
+  nextReviewAt    DateTime  @map("next_review_at") @db.Timestamptz
 
-  /// Course reference (FK with cascade delete)
-  courseId BigInt @map("course_id")
-  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  /// Word token (root form, e.g., "run" not "running")
-  wordToken String @map("word_token") @db.VarChar(100)
-
-  // --------------------------------------------------------
-  // ALGORITHM PARAMETERS (FSRS / SM-2)
-  // --------------------------------------------------------
-
-  /// Memory Stability (days): How long until forgetting
-  stability Float @default(0) @map("stability")
-
-  /// Difficulty Level (0-10): How hard is this word
-  difficulty Float @default(0) @map("difficulty")
-
-  /// Number of reviews completed
-  repetitionCount Int @default(0) @map("repetition_count")
-
-  /// Last review timestamp
-  lastReviewedAt DateTime? @default(now()) @map("last_reviewed_at") @db.Timestamptz
-
-  /// CRITICAL: Next scheduled review time
-  /// This is the most queried field
-  nextReviewAt DateTime @map("next_review_at") @db.Timestamptz
-
-  /// Composite Primary Key: (user_id, course_id, word_token)
-  /// One user can have one record per word per course
   @@id([userId, courseId, wordToken])
-  /// Strategic Index for SRS fetch queue (Phase 17)
-  /// Will be manually optimized with INCLUDE in migration
   @@index([userId, courseId, nextReviewAt], name: "idx_srs_fetch_queue")
   @@map("user_vocabulary_progress")
+}
+
+model Item {
+  id           Int     @id @default(autoincrement())
+  name         String  @db.VarChar(100)
+  type         String  @db.VarChar(50)
+  costGems     Int     @map("cost_gems")
+  isConsumable Boolean @default(false) @map("is_consumable")
+  metadata     Json    @default("{}")
+
+  inventoryRecords UserInventory[]
+
+  @@map("items")
+}
+
+model UserInventory {
+  id         BigInt   @id @default(autoincrement())
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId     Int      @map("item_id")
+  item       Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity   Int      @default(1)
+  acquiredAt DateTime @default(now()) @map("acquired_at") @db.Timestamptz
+
+  @@unique([userId, itemId], name: "uq_user_item")
+  @@map("user_inventory")
+}
+
+enum Currency {
+  GEMS
+  HEARTS
+}
+
+model UserWallet {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency  Currency
+  balance   Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@id([userId, currency])
+  @@map("user_wallets")
+}
+
+/// Partitioned Append-Only Audit Trail
+model TransactionHistory {
+  id              BigInt   @default(autoincrement())
+  userId          String   @map("user_id") @db.Uuid
+  currency        Currency
+  amount          Int
+  balanceAfter    Int      @map("balance_after")
+  transactionType String   @map("transaction_type") @db.VarChar(50)
+  referenceId     String?  @map("reference_id") @db.VarChar(100)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@id([userId, createdAt, id])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("transaction_history")
+}
+
+model League {
+  tier               Int    @id
+  name               String @db.VarChar(50)
+  promotionThreshold Int    @map("promotion_threshold")
+  demotionThreshold  Int    @map("demotion_threshold")
+
+  cohorts LeagueCohort[]
+
+  @@map("leagues")
+}
+
+model LeagueCohort {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  leagueTier    Int      @map("league_tier")
+  league        League   @relation(fields: [leagueTier], references: [tier])
+  weekStartDate DateTime @map("week_start_date") @db.Date
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  members LeagueMembership[]
+
+  @@index([leagueTier, weekStartDate, isActive])
+  @@map("league_cohorts")
+}
+
+model LeagueMembership {
+  cohortId        String       @map("cohort_id") @db.Uuid
+  cohort          LeagueCohort @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  userId          String       @map("user_id") @db.Uuid
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentWeeklyXp Int          @default(0) @map("current_weekly_xp")
+  joinedAt        DateTime     @default(now()) @map("joined_at") @db.Timestamptz
+
+  @@id([cohortId, userId])
+  @@index([cohortId, currentWeeklyXp(sort: Desc)], name: "idx_league_ranking")
+  @@map("league_memberships")
+}
+
+model LootBox {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(100)
+  costGems    Int     @map("cost_gems")
+  description String? @db.VarChar(500)
+  isActive    Boolean @default(true) @map("is_active")
+
+  rates LootBoxRate[]
+
+  @@map("loot_boxes")
+}
+
+model LootBoxRate {
+  id        Int     @id @default(autoincrement())
+  lootBoxId Int     @map("loot_box_id")
+  lootBox   LootBox @relation(fields: [lootBoxId], references: [id], onDelete: Cascade)
+  itemType  String  @map("item_type") @db.VarChar(50)
+  itemValue String  @map("item_value") @db.VarChar(100)
+  weight    Int
+  isRare    Boolean @default(false) @map("is_rare")
+
+  @@map("loot_box_rates")
+}
+
+model Achievement {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  tiers       Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  userProgress UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  userId          String      @map("user_id") @db.Uuid
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId   Int         @map("achievement_id")
+  achievement     Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  currentProgress Int         @default(0) @map("current_progress")
+  completedTier   Int         @default(0) @map("completed_tier")
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@id([userId, achievementId])
+  @@map("user_achievements")
 }

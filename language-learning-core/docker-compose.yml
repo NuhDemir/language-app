@@ -46,5 +46,24 @@ services:
     ports:
       - "6432:6432"
 
+  # --------------------------------------------------------
+  # REDIS - Message Queue (Phase 30: BullMQ)
+  # --------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: language_learning_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
 volumes:
   pgdata:
+  redisdata:
