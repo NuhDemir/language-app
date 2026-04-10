@@ -3,6 +3,10 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Query,
+  Post,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,7 +23,7 @@ import { CoursesService } from './courses.service';
 @ApiTags('Courses')
 @Controller('courses')
 export class CoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(private readonly coursesService: CoursesService) { }
 
   /**
    * Get all available courses.
@@ -142,7 +146,7 @@ export class CoursesController {
   })
   async getCourseHierarchy(@Param('id', ParseIntPipe) id: number) {
     const result = await this.coursesService.getCourseHierarchy(id);
-    
+
     // Convert BigInt to string for JSON serialization
     return {
       id: result.id?.toString() || id.toString(),
@@ -160,5 +164,86 @@ export class CoursesController {
         })),
       })),
     };
+  }
+
+  /**
+   * Get user's progress for a specific course.
+   */
+  @Get(':id/progress')
+  @ApiOperation({
+    summary: 'Get user course progress',
+    description: 'Returns user progress including completed levels, total XP, and enrollment info.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'number',
+    description: 'Course ID',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User progress',
+    schema: {
+      example: {
+        completedLevels: [
+          { levelId: '1', completedAt: '2026-04-10T10:00:00Z' },
+          { levelId: '2', completedAt: '2026-04-10T11:00:00Z' },
+        ],
+        totalXp: 150,
+        totalLevels: 10,
+        enrolledAt: '2026-04-01T08:00:00Z',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Course not found or user not enrolled',
+  })
+  async getUserProgress(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('userId') userId: string,
+  ) {
+    return this.coursesService.getUserCourseProgress(userId, id);
+  }
+
+  /**
+   * Enroll user in a course
+   */
+  @Post(':id/enroll')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Enroll in a course',
+    description: 'Enrolls the user in the specified course.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'number',
+    description: 'Course ID',
+    example: 1,
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Successfully enrolled',
+    schema: {
+      example: {
+        message: 'Successfully enrolled',
+        courseId: '1',
+        enrolledAt: '2026-04-10T10:00:00Z',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Course not found',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Already enrolled',
+  })
+  async enrollInCourse(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('userId') userId: string,
+  ) {
+    return this.coursesService.enrollInCourse(userId, id);
   }
 }

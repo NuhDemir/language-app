@@ -13,7 +13,10 @@ export {
 } from "./inventoryTheme";
 export { LightTheme, type ThemeType } from "./light";
 export { DarkTheme } from "./dark";
+export { Y2K } from "./y2k";
+export { Y2KPalette } from "../tokens/y2k-palette";
 export type ThemeColors = ThemeType;
 
 // Default theme export for backward compatibility
 export { LightTheme as Theme } from "./light";
+

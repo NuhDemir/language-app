@@ -26,13 +26,7 @@ export default function AppLayout() {
 
   return (
     <View style={styles.container}>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="home" />
-        <Stack.Screen name="learn" />
-        <Stack.Screen name="leaderboard" />
-        <Stack.Screen name="profile" />
-        <Stack.Screen name="lesson/[levelId]" />
-      </Stack>
+      <Stack screenOptions={{ headerShown: false }} />
 
       {/* Bottom Tab Bar - visible on all screens except lesson */}
       <BottomTabBar

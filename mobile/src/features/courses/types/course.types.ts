@@ -30,10 +30,39 @@ export interface CourseBasic {
   learningLangCode: string;
   fromLangCode: string;
   title: string;
+  description?: string;
   phase: string;
 }
 
+// Enrollment response
+export interface EnrollmentResponse {
+  id: string;
+  userId: string;
+  courseId: string;
+  enrolledAt: string;
+  isActive: boolean;
+}
+
+// My courses response
+export interface MyCourse extends CourseBasic {
+  enrolledAt: string;
+  isActive: boolean;
+  progress: {
+    completedLevels: number;
+    totalLevels: number;
+    totalXp: number;
+    currentUnitIndex: number;
+    currentLevelIndex: number;
+  };
+}
+
+// Course with enrollment status
+export interface CourseWithEnrollment extends CourseBasic {
+  isEnrolled: boolean;
+  enrolledAt?: string;
+}
+
 // FlatList için dönüştürülmüş veri tipi
-export type MapItem = 
+export type MapItem =
   | { type: 'unit'; data: UnitWithLevels }
   | { type: 'level'; data: LevelNode; unitId: string };

@@ -24,6 +24,7 @@ interface LevelStatsProps {
   totalLessons: number;
   xpEarned: number;
   timeSpentMinutes: number;
+  accuracy?: number; // Average accuracy percentage (0-100)
 }
 
 // ============================================================================
@@ -65,12 +66,18 @@ const LevelStatsComponent: React.FC<LevelStatsProps> = ({
   totalLessons,
   xpEarned,
   timeSpentMinutes,
+  accuracy,
 }) => {
   const stats: StatItem[] = [
     { label: 'LESSONS', value: `${completedLessons}/${totalLessons}` },
     { label: 'XP EARNED', value: xpEarned.toString() },
     { label: 'TIME', value: formatTime(timeSpentMinutes) },
   ];
+
+  // Add accuracy stat if available and lessons have been completed
+  if (accuracy !== undefined && completedLessons > 0) {
+    stats.push({ label: 'ACCURACY', value: `${Math.round(accuracy)}%` });
+  }
 
   return (
     <View style={styles.container}>

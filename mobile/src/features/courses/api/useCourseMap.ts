@@ -5,113 +5,131 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { coursesApi } from './courses.api';
 import { useCourseStore } from '../stores';
-import type { 
+import { useCourseProgress } from './useCourseProgress';
+import { parseApiError } from '../types/errors.types';
+import type {
   CourseHierarchyResponse,
-  CourseMapLevel, 
+  CourseMapLevel,
   CourseMapData,
-  LevelStatus 
+  LevelStatus,
+  CourseProgressResponse,
+  LevelProgressResponse
 } from '../types';
-
-// ============================================================================
-// MOCK PROGRESS DATA (replace with real API when available)
-// ============================================================================
-
-interface MockProgressData {
-  completedLessons: number;
-  xpEarned: number;
-  timeSpentMinutes: number;
-}
-
-// Simulated progress - in production this comes from the server
-const getMockProgress = (levelId: string, isCompleted: boolean, isActive: boolean): MockProgressData => {
-  if (isCompleted) {
-    return {
-      completedLessons: 5 + Math.floor(Math.random() * 2), // 5-6 lessons
-      xpEarned: 200 + Math.floor(Math.random() * 150), // 200-350 XP
-      timeSpentMinutes: 45 + Math.floor(Math.random() * 30), // 45-75 min
-    };
-  }
-  
-  if (isActive) {
-    return {
-      completedLessons: 12, // Example: 12 of 24
-      xpEarned: 450,
-      timeSpentMinutes: 135, // 2h 15m
-    };
-  }
-  
-  return {
-    completedLessons: 0,
-    xpEarned: 0,
-    timeSpentMinutes: 0,
-  };
-};
 
 // ============================================================================
 // TRANSFORM FUNCTIONS
 // ============================================================================
 
+/**
+ * Calculate level status based on progress data
+ * 
+ * Algorithm from design document:
+ * 1. If all lessons completed -> 'completed'
+ * 2. If current level with progress -> 'in_progress'
+ * 3. If current level without progress -> 'active'
+ * 4. If previous level not completed -> 'locked'
+ * 5. If first level and not completed -> 'active'
+ */
 const calculateLevelStatus = (
   levelId: string,
-  globalIndex: number,
+  levelProgress: LevelProgressResponse | undefined,
   completedLevelIds: number[],
-  currentLevelId: number | null
+  currentLevelId: number | null,
+  isFirstLevel: boolean
 ): LevelStatus => {
   const id = parseInt(levelId);
-  
+
+  // Step 1: Check if completed (all lessons done)
+  if (levelProgress && levelProgress.completedLessons === levelProgress.totalLessons) {
+    return 'completed';
+  }
+
+  // Also check store's completed list
   if (completedLevelIds.includes(id)) {
     return 'completed';
   }
-  
+
+  // Step 2: Check if current level
   if (currentLevelId === id) {
-    return 'in_progress';
-  }
-  
-  // First uncompleted level is active
-  if (globalIndex === 0 && !currentLevelId) {
-    return 'active';
-  }
-  
-  // Check if previous level is completed
-  const prevLevelCompleted = globalIndex === 0 || completedLevelIds.length >= globalIndex;
-  if (prevLevelCompleted && !completedLevelIds.includes(id)) {
-    // If no current level set, first uncompleted is active
-    if (!currentLevelId) {
+    // Check if has progress
+    if (levelProgress && levelProgress.completedLessons > 0) {
+      return 'in_progress';
+    } else {
       return 'active';
     }
   }
-  
-  return 'locked';
+
+  // Step 3: Check if previous level is completed
+  const previousLevelId = id - 1;
+
+  if (isFirstLevel) {
+    // First level is always active if not completed
+    return 'active';
+  }
+
+  if (completedLevelIds.includes(previousLevelId)) {
+    // Previous completed, this is next available
+    return 'active';
+  } else {
+    // Previous not completed, this is locked
+    return 'locked';
+  }
 };
 
-const transformToCourseMapData = (
+/**
+ * Transform hierarchy and progress data into course map data
+ * 
+ * Algorithm from design document:
+ * 1. Flatten hierarchy into levels array
+ * 2. Enrich each level with progress data
+ * 3. Calculate status for each level
+ * 4. Calculate progress percentage
+ * 5. Partition levels for display
+ */
+const transformToCourseMapDataWithProgress = (
   hierarchy: CourseHierarchyResponse,
+  progressResponse: CourseProgressResponse | undefined,
   completedLevelIds: number[],
   currentLevelId: number | null
 ): CourseMapData => {
   const levels: CourseMapLevel[] = [];
-  let globalIndex = 0;
-  let currentActiveLevelId: string | null = null;
-  
+
+  // Create a map for quick progress lookup
+  const progressMap = new Map<string, LevelProgressResponse>();
+  if (progressResponse?.levels) {
+    progressResponse.levels.forEach((levelProgress) => {
+      progressMap.set(levelProgress.levelId, levelProgress);
+    });
+  }
+
+  // Step 1: Flatten hierarchy
   hierarchy.curriculum.forEach((unit) => {
-    unit.levels.forEach((level) => {
+    unit.levels.forEach((level, levelIndex) => {
+      // Get progress for this level
+      const levelProgress = progressMap.get(level.id);
+
+      // Determine if this is the first level in the course
+      const isFirstLevel = unit.order_index === 0 && levelIndex === 0;
+
+      // Calculate status
       const status = calculateLevelStatus(
         level.id,
-        globalIndex,
+        levelProgress,
         completedLevelIds,
-        currentLevelId
+        currentLevelId,
+        isFirstLevel
       );
-      
-      const isCompleted = status === 'completed';
-      const isActive = status === 'active' || status === 'in_progress';
-      
-      if (isActive && !currentActiveLevelId) {
-        currentActiveLevelId = level.id;
-      }
-      
-      const mockProgress = getMockProgress(level.id, isCompleted, isActive);
-      const totalLessons = level.total_lessons || 24; // Default to 24 if not set
-      
+
+      // Get lesson counts
+      const totalLessons = level.total_lessons || 24;
+      const completedLessons = levelProgress?.completedLessons || 0;
+
+      // Calculate progress percentage
+      const progressPercent = totalLessons > 0
+        ? Math.round((completedLessons / totalLessons) * 100)
+        : 0;
+
+      // Create enriched level object
       levels.push({
         id: level.id,
         unitId: unit.id,
@@ -119,25 +137,21 @@ const transformToCourseMapData = (
         unitOrderIndex: unit.order_index,
         orderIndex: level.order_index,
         totalLessons,
-        completedLessons: isCompleted ? totalLessons : mockProgress.completedLessons,
+        completedLessons,
         status,
-        xpEarned: mockProgress.xpEarned,
-        timeSpentMinutes: mockProgress.timeSpentMinutes,
-        progress: isCompleted 
-          ? 100 
-          : Math.round((mockProgress.completedLessons / totalLessons) * 100),
+        xpEarned: levelProgress?.xpEarned || 0,
+        timeSpentMinutes: levelProgress?.timeSpentMinutes || 0,
+        progress: progressPercent,
       });
-      
-      globalIndex++;
     });
   });
-  
+
   return {
     courseId: hierarchy.id,
     courseTitle: hierarchy.title,
     levels,
-    currentLevelId: currentActiveLevelId,
-    completedLevelsCount: levels.filter((l) => l.status === 'completed').length,
+    currentLevelId: progressResponse?.currentLevelId || null,
+    completedLevelsCount: progressResponse?.completedLevelsCount || 0,
     totalLevelsCount: levels.length,
   };
 };
@@ -150,49 +164,84 @@ export const useCourseMap = (courseId: number | null) => {
   const completedLevelIds = useCourseStore((s) => s.completedLevelIds);
   const currentLevelId = useCourseStore((s) => s.currentLevelId);
 
-  const query = useQuery({
+  // Fetch hierarchy
+  const hierarchyQuery = useQuery({
     queryKey: ['course', courseId, 'hierarchy'],
-    queryFn: () => coursesApi.getHierarchy(courseId!),
+    queryFn: async () => {
+      try {
+        return await coursesApi.getHierarchy(courseId!);
+      } catch (error) {
+        const parsedError = parseApiError(error);
+        console.error('❌ [Course Map] Failed to fetch hierarchy:', {
+          courseId,
+          type: parsedError.type,
+          message: parsedError.message,
+          statusCode: parsedError.statusCode,
+        });
+        throw parsedError;
+      }
+    },
     enabled: !!courseId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes cache
+    retry: (failureCount, error: any) => {
+      const parsedError = parseApiError(error);
+      // Only retry network errors and server errors, max 3 times
+      return parsedError.retryable && failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
+
+  // Fetch progress data
+  const progressQuery = useCourseProgress(courseId);
 
   // Transform data for Course Map display
   const courseMapData = useMemo<CourseMapData | null>(() => {
-    if (!query.data) return null;
-    return transformToCourseMapData(
-      query.data,
+    if (!hierarchyQuery.data) return null;
+
+    return transformToCourseMapDataWithProgress(
+      hierarchyQuery.data,
+      progressQuery.data,
       completedLevelIds,
       currentLevelId
     );
-  }, [query.data, completedLevelIds, currentLevelId]);
+  }, [hierarchyQuery.data, progressQuery.data, completedLevelIds, currentLevelId]);
 
   // Get displaying levels (completed, active, next)
   const displayLevels = useMemo(() => {
     if (!courseMapData) {
       return { completed: [], active: null, next: null };
     }
-    
+
     const levels = courseMapData.levels;
     const activeIndex = levels.findIndex(
       (l) => l.status === 'active' || l.status === 'in_progress'
     );
-    
+
     return {
       // All completed levels before active
       completed: activeIndex > 0 ? levels.slice(0, activeIndex) : [],
       // Current active level
       active: activeIndex >= 0 ? levels[activeIndex] : null,
       // Next level (first locked after active)
-      next: activeIndex >= 0 && activeIndex < levels.length - 1 
-        ? levels[activeIndex + 1] 
+      next: activeIndex >= 0 && activeIndex < levels.length - 1
+        ? levels[activeIndex + 1]
         : null,
     };
   }, [courseMapData]);
 
+  // Refetch function for both queries
+  const refetch = () => {
+    hierarchyQuery.refetch();
+    progressQuery.refetch();
+  };
+
   return {
-    ...query,
+    data: courseMapData,
+    isLoading: hierarchyQuery.isLoading || progressQuery.isLoading,
+    isError: hierarchyQuery.isError || progressQuery.isError,
+    error: hierarchyQuery.error || progressQuery.error,
+    refetch,
     courseMapData,
     displayLevels,
     courseTitle: courseMapData?.courseTitle || '',

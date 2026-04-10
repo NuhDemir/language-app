@@ -10,6 +10,30 @@ export interface LevelProgress {
   lastCompletedAt: string | null;
 }
 
+// Backend response for level progress
+export interface LevelProgressResponse {
+  levelId: string;
+  completedLessons: number;
+  totalLessons: number;
+  xpEarned: number;
+  timeSpentMinutes: number;
+  lastCompletedAt: string | null;
+  accuracy: number; // Average accuracy percentage
+}
+
+// Backend response for course progress
+export interface CourseProgressResponse {
+  courseId: string;
+  userId: string;
+  enrolledAt: string;
+  totalXp: number;
+  totalTimeMinutes: number;
+  completedLevelsCount: number;
+  totalLevelsCount: number;
+  currentLevelId: string | null;
+  levels: LevelProgressResponse[];
+}
+
 export interface UnitProgress {
   unitId: string;
   completedLevels: number;
@@ -41,6 +65,8 @@ export interface CourseMapLevel {
   xpEarned: number;
   timeSpentMinutes: number;
   progress: number; // 0-100
+  accuracy?: number; // Average accuracy percentage (0-100)
+  lastCompletedAt?: string | null;
 }
 
 export interface CourseMapData {

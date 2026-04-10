@@ -5,3 +5,4 @@
 
 export { Layout } from './layout';
 export { Shadows } from './shadows';
+export * from './skeuomorphic';

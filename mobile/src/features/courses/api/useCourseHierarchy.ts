@@ -1,17 +1,18 @@
 // src/features/courses/api/useCourseHierarchy.ts
-// React Query hook for course hierarchy with data transformation
+// React Query hook for course hierarchy with data transformation and error handling
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { coursesApi } from './courses.api';
 import { useCourseStore } from '../stores';
-import { 
-  CourseHierarchyResponse, 
-  LevelNode, 
-  NodeStatus, 
+import {
+  CourseHierarchyResponse,
+  LevelNode,
+  NodeStatus,
   NodePosition,
-  MapItem 
+  MapItem
 } from '../types';
+import { parseApiError } from '../types/errors.types';
 
 // Zigzag pattern for node positioning
 const POSITION_PATTERN: NodePosition[] = ['center', 'left', 'center', 'right'];
@@ -26,20 +27,20 @@ const calculateNodeStatus = (
   currentLevelId: number | null
 ): NodeStatus => {
   const id = parseInt(levelId);
-  
+
   if (completedLevelIds.includes(id)) {
     return 'completed';
   }
-  
+
   if (currentLevelId === id) {
     return 'active';
   }
-  
+
   // First level is always active if no current level set
   if (orderIndex === 1 && !currentLevelId) {
     return 'active';
   }
-  
+
   return 'locked';
 };
 
@@ -78,12 +79,12 @@ const transformHierarchyToMapItems = (
         position: getNodePosition(globalLevelIndex),
       };
 
-      items.push({ 
-        type: 'level', 
-        data: enrichedLevel, 
-        unitId: unit.id 
+      items.push({
+        type: 'level',
+        data: enrichedLevel,
+        unitId: unit.id
       });
-      
+
       globalLevelIndex++;
     });
   });
@@ -92,7 +93,7 @@ const transformHierarchyToMapItems = (
 };
 
 /**
- * Main hook for fetching and transforming course hierarchy
+ * Main hook for fetching and transforming course hierarchy with error handling
  */
 export const useCourseHierarchy = (courseId: number | null) => {
   const completedLevelIds = useCourseStore((s) => s.completedLevelIds);
@@ -100,10 +101,29 @@ export const useCourseHierarchy = (courseId: number | null) => {
 
   const query = useQuery({
     queryKey: ['course', courseId, 'hierarchy'],
-    queryFn: () => coursesApi.getHierarchy(courseId!),
+    queryFn: async () => {
+      try {
+        return await coursesApi.getHierarchy(courseId!);
+      } catch (error) {
+        const parsedError = parseApiError(error);
+        console.error('❌ [Course Hierarchy] Failed to fetch hierarchy:', {
+          courseId,
+          type: parsedError.type,
+          message: parsedError.message,
+          statusCode: parsedError.statusCode,
+        });
+        throw parsedError;
+      }
+    },
     enabled: !!courseId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes cache
+    retry: (failureCount, error: any) => {
+      const parsedError = parseApiError(error);
+      // Only retry network errors and server errors, max 3 times
+      return parsedError.retryable && failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
   });
 
   // Transform data for FlatList

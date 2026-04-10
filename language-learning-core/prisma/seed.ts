@@ -36,18 +36,42 @@ async function main() {
       learningLangCode: 'en',
       fromLangCode: 'tr',
       title: 'Türkçe Konuşanlar İçin İngilizce',
+      description: 'Günlük hayatta kullanabileceğiniz pratik İngilizce öğrenin. Temel gramerden ileri seviyeye kadar kapsamlı müfredat.',
       phase: 'live',
     },
     {
       learningLangCode: 'es',
       fromLangCode: 'en',
       title: 'Spanish for English Speakers',
+      description: 'Learn practical Spanish for everyday conversations. From basic greetings to advanced grammar.',
       phase: 'live',
     },
     {
       learningLangCode: 'tr',
       fromLangCode: 'en',
       title: 'Turkish for English Speakers',
+      description: 'Discover the beauty of Turkish language. Learn to speak, read and write Turkish with confidence.',
+      phase: 'beta',
+    },
+    {
+      learningLangCode: 'de',
+      fromLangCode: 'en',
+      title: 'German for English Speakers',
+      description: 'Master German grammar and vocabulary. Perfect for beginners and intermediate learners.',
+      phase: 'live',
+    },
+    {
+      learningLangCode: 'en',
+      fromLangCode: 'es',
+      title: 'Inglés para Hispanohablantes',
+      description: 'Aprende inglés de manera práctica y efectiva. Desde lo básico hasta nivel avanzado.',
+      phase: 'live',
+    },
+    {
+      learningLangCode: 'ar',
+      fromLangCode: 'en',
+      title: 'Arabic for English Speakers',
+      description: 'Learn Modern Standard Arabic with comprehensive lessons covering reading, writing and speaking.',
       phase: 'beta',
     },
   ];
@@ -325,16 +349,18 @@ async function main() {
       create: {
         courseId: mainCourse.id,
         orderIndex: 1,
-        title: 'Simple Present Tense - Basics',
-        description: 'Learn the fundamentals of Simple Present Tense. Daily routines and habits.',
+        title: 'Temel İngilizce - Başlangıç',
+        description: 'İngilizcenin temellerini öğrenin. Günlük konuşmalarda kullanacağınız basit cümleler ve kelimeler.',
         colorTheme: '#3da9fc',
         iconUrl: 'unit_basics.png',
         guidebookContent: {
-          summary: 'Simple Present Tense, tekrarlanan eylemler, alışkanlıklar ve genel doğrular için kullanılır.',
+          summary: 'Bu ünitede İngilizcenin temel yapı taşlarını öğreneceksiniz. Selamlaşma, tanışma ve basit cümleler kurmayı öğreneceksiniz.',
           grammar_tips: [
-            'I/You/We/They → verb (work, eat, play)',
-            'He/She/It → verb + s/es (works, eats, plays)',
+            'I am, You are, He/She/It is, We/They are',
+            'Basit fiiller: go, come, eat, drink, sleep',
+            'Soru kalıpları: What, Where, Who, When',
           ],
+          vocabulary_focus: ['Greetings', 'Numbers', 'Colors', 'Family members'],
         },
       },
     });
@@ -361,10 +387,19 @@ async function main() {
       create: {
         courseId: mainCourse.id,
         orderIndex: 2,
-        title: 'Negatives & Questions',
-        description: 'Master negative sentences and question forms in Simple Present.',
+        title: 'Olumsuz Cümleler ve Sorular',
+        description: 'Olumsuz cümleler kurmayı ve soru sormayı öğrenin. Do/Does kullanımı ve soru kalıpları.',
         colorTheme: '#2cb67d',
         iconUrl: 'unit_questions.png',
+        guidebookContent: {
+          summary: 'Bu ünitede olumsuz cümleler ve sorular kurmayı öğreneceksiniz.',
+          grammar_tips: [
+            'Olumsuz: I do not (don\'t) like, He does not (doesn\'t) work',
+            'Soru: Do you like? Does she work?',
+            'Wh- Questions: What do you do? Where does he live?',
+          ],
+          vocabulary_focus: ['Question words', 'Common verbs', 'Time expressions'],
+        },
       },
     });
     console.log(`  ✅ Unit 2: ${unit2.title}`);
@@ -389,10 +424,19 @@ async function main() {
       create: {
         courseId: mainCourse.id,
         orderIndex: 3,
-        title: 'Daily Routines',
-        description: 'Talk about your daily activities and schedules.',
+        title: 'Günlük Rutinler',
+        description: 'Günlük aktivitelerinizi ve programınızı anlatmayı öğrenin. Saat söyleme ve zaman ifadeleri.',
         colorTheme: '#ffbc0a',
         iconUrl: 'unit_routines.png',
+        guidebookContent: {
+          summary: 'Günlük hayatınızı İngilizce anlatmayı öğrenin. Sabah rutinlerinden akşam aktivitelerine kadar.',
+          grammar_tips: [
+            'Present Simple for routines: I wake up at 7 AM',
+            'Time expressions: in the morning, at night, on Monday',
+            'Frequency adverbs: always, usually, sometimes, never',
+          ],
+          vocabulary_focus: ['Daily activities', 'Time', 'Days of week', 'Frequency adverbs'],
+        },
       },
     });
     console.log(`  ✅ Unit 3: ${unit3.title}`);
@@ -417,10 +461,19 @@ async function main() {
       create: {
         courseId: mainCourse.id,
         orderIndex: 4,
-        title: 'Ordering Food',
-        description: 'Learn to order food at restaurants and cafes.',
+        title: 'Yemek Sipariş Etme',
+        description: 'Restoran ve kafelerde yemek sipariş etmeyi öğrenin. Menü okuma ve tercihlerinizi belirtme.',
         colorTheme: '#ef4565',
         iconUrl: 'unit_food.png',
+        guidebookContent: {
+          summary: 'Restoranlarda rahatça sipariş verebileceksiniz. Yemek isimleri, içecekler ve özel istekler.',
+          grammar_tips: [
+            'I would like... / I\'ll have...',
+            'Can I have...? / Could I get...?',
+            'Polite requests: Please, Thank you',
+          ],
+          vocabulary_focus: ['Food items', 'Drinks', 'Restaurant phrases', 'Preferences'],
+        },
       },
     });
     console.log(`  ✅ Unit 4: ${unit4.title}`);
@@ -445,10 +498,19 @@ async function main() {
       create: {
         courseId: mainCourse.id,
         orderIndex: 5,
-        title: 'Work & Professions',
-        description: 'Talk about jobs, workplaces and professional activities.',
+        title: 'İş ve Meslekler',
+        description: 'Meslekler, iş yerleri ve profesyonel aktiviteler hakkında konuşmayı öğrenin.',
         colorTheme: '#7048e8',
         iconUrl: 'unit_work.png',
+        guidebookContent: {
+          summary: 'İş hayatı ile ilgili konuşmaları öğrenin. Mesleğinizi tanıtma ve iş görüşmeleri.',
+          grammar_tips: [
+            'I work as a... / I am a...',
+            'Present Continuous for current actions: I am working',
+            'Work-related verbs: manage, develop, design, teach',
+          ],
+          vocabulary_focus: ['Professions', 'Workplace', 'Job duties', 'Office items'],
+        },
       },
     });
     console.log(`  ✅ Unit 5: ${unit5.title}`);

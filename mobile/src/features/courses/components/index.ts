@@ -10,4 +10,6 @@ export * from './StatusBadge';
 export * from './StartLessonButton';
 export * from './LevelCard';
 export * from './CourseMapHeader';
+export * from './CourseSelectorModal';
+export * from './CourseCard';
 

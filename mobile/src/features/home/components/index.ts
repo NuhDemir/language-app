@@ -3,8 +3,16 @@
  * Barrel export for home-related components
  */
 
-export { Header } from './Header';
-export { QuickAccessCard } from './QuickAccessCard';
-export { ResourceItem } from './ResourceItem';
-export { ResourcesSlider } from './ResourcesSlider';
-export { TaskCard } from './TaskCard';
+/**
+ * Home Components Index
+ * Atomic design structure exports
+ */
+
+// Atoms
+export * from './atoms';
+
+// Molecules
+export * from './molecules';
+
+// Organisms
+export * from './organisms';

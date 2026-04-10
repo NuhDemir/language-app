@@ -8,13 +8,11 @@ import Toast from 'react-native-toast-message';
 
 import { COLORS, SPACING, FONT_SIZES } from '../../../constants/theme';
 import { AppText } from '../../../components/ui';
-import {
-  useLessonStore,
-  useExercises,
-  useLessonFinish,
-} from '../../lesson';
-import { useCourseStore } from '../../courses';
-import { LessonSession } from '../../lesson/components';
+import { useLessonStore } from '../stores/lesson.store';
+import { useExercises } from '../api/useExercises';
+import { useLessonFinish } from '../api/useLessonFinish';
+import { useCourseStore } from '../../courses/stores/course.store';
+import { LessonSession } from '../components/LessonSession';
 
 export default function LessonScreen() {
   const router = useRouter();
@@ -33,7 +31,6 @@ export default function LessonScreen() {
   const startLesson = useLessonStore((s) => s.startLesson);
   const resetLesson = useLessonStore((s) => s.resetLesson);
   const getLessonResult = useLessonStore((s) => s.getLessonResult);
-  const status = useLessonStore((s) => s.status);
 
   // Start lesson when exercises are loaded
   useEffect(() => {
@@ -64,12 +61,14 @@ export default function LessonScreen() {
       });
     }
 
-    router.replace('/(app)/home');
+    // Navigate back to Learn screen after completion (maintains navigation history)
+    router.back();
   };
 
   // Handle exit
   const handleExit = () => {
-    router.replace('/(app)/home');
+    // Navigate back to Learn screen when exiting (maintains navigation history)
+    router.back();
   };
 
   // Loading state

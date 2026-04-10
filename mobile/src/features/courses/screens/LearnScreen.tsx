@@ -2,7 +2,7 @@
 // Course Map Screen - Responsive & Modular
 // Displays course progress with level cards as shown in the design
 
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,17 +15,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Toast from 'react-native-toast-message';
+import { ChevronDown } from 'lucide-react-native';
 
 import { COLORS, SPACING, FONT_SIZES, RADIUS, FONTS } from '../../../constants/theme';
 import { AppText } from '../../../components/ui';
-import { useAuthStore } from '../../../stores/auth.store';
-import {
-  useCourseMap,
-  useCourses,
-  useCourseStore,
-  CourseMapHeader,
-  LevelCard,
-} from '..';
+import { useCourseMap } from '../api/useCourseMap';
+import { useCourses } from '../api/useCourses';
+import { useCourseStore } from '../stores/course.store';
+import { CourseMapHeader } from '../components/CourseMapHeader';
+import { LevelCard } from '../components/LevelCard';
+import { CourseSelectorModal } from '../components/CourseSelectorModal';
 import type { CourseMapLevel } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -95,7 +94,6 @@ CompletedLevelsList.displayName = 'CompletedLevelsList';
 
 export const LearnScreen: React.FC = () => {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
 
   // Course store
   const activeCourseId = useCourseStore((s) => s.activeCourseId);
@@ -113,7 +111,9 @@ export const LearnScreen: React.FC = () => {
   } = useCourseMap(activeCourseId);
 
   // UI State
-  const [showCompletedList, setShowCompletedList] = React.useState(false);
+  const [showCompletedList, setShowCompletedList] = useState(false);
+  const [showCourseSelector, setShowCourseSelector] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Auto-select first course
   useEffect(() => {
@@ -137,6 +137,30 @@ export const LearnScreen: React.FC = () => {
     });
   }, []);
 
+  // Handle course selector button press
+  const handleCourseSelectorPress = useCallback(() => {
+    setShowCourseSelector(true);
+  }, []);
+
+  // Handle course selection from modal
+  const handleSelectCourse = useCallback((courseId: string) => {
+    const newCourseId = parseInt(courseId);
+
+    // Update active course
+    setActiveCourse(newCourseId);
+
+    // Reset current level for new course
+    setCurrentLevel(0);
+
+    // Show success toast
+    Toast.show({
+      type: 'success',
+      text1: 'Course Switched',
+      text2: 'Continue learning!',
+      position: 'bottom',
+    });
+  }, [setActiveCourse, setCurrentLevel]);
+
   // Handle start lesson
   const handleStartLesson = useCallback((levelId: string) => {
     const id = parseInt(levelId);
@@ -159,18 +183,29 @@ export const LearnScreen: React.FC = () => {
     setShowCompletedList((prev) => !prev);
   }, []);
 
-  // Determine card variant for a level
-  const getCardVariant = useCallback((level: CourseMapLevel): 'active' | 'completed' | 'next' | 'locked' => {
-    switch (level.status) {
-      case 'completed':
-        return 'completed';
-      case 'active':
-      case 'in_progress':
-        return 'active';
-      default:
-        return 'next';
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+      Toast.show({
+        type: 'success',
+        text1: 'Progress Synced',
+        text2: 'Your latest progress has been loaded',
+        position: 'bottom',
+        visibilityTime: 2000,
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Sync Failed',
+        text2: 'Could not refresh progress data',
+        position: 'bottom',
+      });
+    } finally {
+      setRefreshing(false);
     }
-  }, []);
+  }, [refetch]);
 
   // Loading state
   if (isLoading) {
@@ -192,10 +227,16 @@ export const LearnScreen: React.FC = () => {
         <CourseMapHeader title="Course Map" onBackPress={handleBackPress} />
         <View style={styles.emptyContainer}>
           <AppText style={styles.emptyEmoji}>🌍</AppText>
-          <AppText style={styles.emptyTitle}>Select a Course</AppText>
+          <AppText style={styles.emptyTitle}>No Active Course</AppText>
           <AppText style={styles.emptyText}>
-            Choose a course to start learning
+            Browse courses and enroll to start learning
           </AppText>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => router.push('/courses/list')}
+          >
+            <AppText style={styles.browseButtonText}>Browse Courses</AppText>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -207,7 +248,7 @@ export const LearnScreen: React.FC = () => {
       <SafeAreaView style={styles.container} edges={['top']}>
         <CourseMapHeader title="Course Map" onBackPress={handleBackPress} />
         <View style={styles.emptyContainer}>
-          <AppText style={styles.emptyEmoji}>😔</AppText>
+          <AppText style={styles.emptyEmoji}></AppText>
           <AppText style={styles.emptyTitle}>Error</AppText>
           <AppText style={styles.emptyText}>
             Failed to load course data
@@ -228,15 +269,30 @@ export const LearnScreen: React.FC = () => {
         onMenuPress={handleMenuPress}
       />
 
+      {/* Course Selector Button */}
+      <TouchableOpacity
+        style={styles.courseSelectorButton}
+        onPress={handleCourseSelectorPress}
+        activeOpacity={0.7}
+      >
+        <AppText style={styles.courseSelectorText} numberOfLines={1}>
+          {courseTitle || 'Select Course'}
+        </AppText>
+        <ChevronDown size={isTablet ? 24 : 20} color={COLORS.primary.main} strokeWidth={2.5} />
+      </TouchableOpacity>
+
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={false}
-            onRefresh={refetch}
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
             tintColor={COLORS.primary.main}
+            colors={[COLORS.primary.main]}
+            title="Pull to sync progress"
+            titleColor={COLORS.neutral.body}
           />
         }
       >
@@ -267,6 +323,14 @@ export const LearnScreen: React.FC = () => {
           />
         )}
       </ScrollView>
+
+      {/* Course Selector Modal */}
+      <CourseSelectorModal
+        visible={showCourseSelector}
+        onClose={() => setShowCourseSelector(false)}
+        onSelectCourse={handleSelectCourse}
+        currentCourseId={activeCourseId?.toString() || null}
+      />
     </SafeAreaView>
   );
 };
@@ -286,6 +350,30 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 120,
     paddingTop: SPACING.sm,
+  },
+
+  // Course Selector Button
+  courseSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.neutral.surface,
+    marginHorizontal: isTablet ? SPACING.xl : SPACING.md,
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.xs,
+    paddingHorizontal: isTablet ? SPACING.lg : SPACING.md,
+    paddingVertical: isTablet ? SPACING.md : SPACING.sm + 2,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.neutral.border,
+  },
+  courseSelectorText: {
+    fontFamily: FONTS.medium,
+    fontSize: isTablet ? FONT_SIZES.lg : FONT_SIZES.md,
+    fontWeight: '600',
+    color: COLORS.primary.main,
+    flex: 1,
+    marginRight: SPACING.sm,
   },
 
   // Loading
@@ -332,6 +420,18 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
   },
   retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+  browseButton: {
+    backgroundColor: COLORS.primary.main,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.lg,
+    marginTop: SPACING.lg,
+  },
+  browseButtonText: {
     color: '#FFFFFF',
     fontSize: FONT_SIZES.md,
     fontWeight: '700',

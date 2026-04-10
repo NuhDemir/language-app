@@ -89,6 +89,7 @@ const ActiveLevelCard: React.FC<ActiveLevelCardProps> = memo(({
         totalLessons={level.totalLessons}
         xpEarned={level.xpEarned}
         timeSpentMinutes={level.timeSpentMinutes}
+        accuracy={level.accuracy}
       />
 
       {/* Start Button */}

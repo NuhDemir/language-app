@@ -10,7 +10,7 @@ import { CourseHierarchyResponse } from '../interfaces';
 export class CourseRepository {
   private readonly logger = new Logger(CourseRepository.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   /**
    * Get complete course hierarchy in a single query.
@@ -89,6 +89,98 @@ export class CourseRepository {
       include: {
         learningLang: true,
         fromLang: true,
+      },
+    });
+  }
+
+  /**
+   * Get user's progress for a specific course.
+   * Returns completed levels, total XP, and current level.
+   */
+  async getUserCourseProgress(userId: string, courseId: number) {
+    this.logger.log(`Fetching progress for user ${userId} in course ${courseId}`);
+
+    // Check if user is enrolled
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: {
+        userId_courseId: {
+          userId,
+          courseId: BigInt(courseId),
+        },
+      },
+    });
+
+    if (!enrollment) {
+      return null;
+    }
+
+    // Get completed levels from lesson_completions
+    const completedLevels = await this.prisma.$queryRaw<
+      Array<{ levelId: bigint; completedAt: Date }>
+    >`
+      SELECT DISTINCT 
+        level_id as "levelId",
+        MAX(completed_at) as "completedAt"
+      FROM lesson_completions
+      WHERE user_id = ${userId}::uuid
+        AND course_id = ${courseId}
+      GROUP BY level_id
+      ORDER BY MAX(completed_at) DESC
+    `;
+
+    // Get total XP earned in this course
+    const xpResult = await this.prisma.$queryRaw<Array<{ totalXp: bigint }>>`
+      SELECT COALESCE(SUM(xp_earned), 0) as "totalXp"
+      FROM lesson_completions
+      WHERE user_id = ${userId}::uuid
+        AND course_id = ${courseId}
+    `;
+
+    // Get total levels in course
+    const totalLevelsResult = await this.prisma.$queryRaw<
+      Array<{ totalLevels: bigint }>
+    >`
+      SELECT COUNT(*) as "totalLevels"
+      FROM levels l
+      JOIN units u ON l.unit_id = u.id
+      WHERE u.course_id = ${courseId}
+    `;
+
+    return {
+      completedLevels: completedLevels.map((cl) => ({
+        levelId: cl.levelId.toString(),
+        completedAt: cl.completedAt,
+      })),
+      totalXp: Number(xpResult[0]?.totalXp || 0),
+      totalLevels: Number(totalLevelsResult[0]?.totalLevels || 0),
+      enrolledAt: enrollment.enrolledAt,
+    };
+  }
+
+  /**
+   * Get enrollment record for a user and course.
+   */
+  async getEnrollment(userId: string, courseId: number) {
+    return this.prisma.enrollment.findUnique({
+      where: {
+        userId_courseId: {
+          userId,
+          courseId: BigInt(courseId),
+        },
+      },
+    });
+  }
+
+  /**
+   * Create enrollment record for a user and course.
+   */
+  async createEnrollment(userId: string, courseId: number) {
+    return this.prisma.enrollment.create({
+      data: {
+        userId,
+        courseId: BigInt(courseId),
+        isActive: true,
+        progressData: {},
       },
     });
   }
